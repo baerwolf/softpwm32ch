@@ -13,6 +13,10 @@ LFUSE  = 0xe1
 F_CPU = 16000000
 
 # extra data section
+DEFINES += -DCPUCONTEXTINCLUDEDEFINES
+DEFINES += -DSOFTPWM_UPDATECYCLES=32
+#DEFINES += -DSOFTPWM_INSANE_OPTIMIZATION=1 -nostartfiles
+
 # DEFINES += -D__AVR_LIBC_DEPRECATED_ENABLE__
 # DEFINES += -DDATASECTION=__attribute__\ \(\(section\ \(\".extradata\"\)\)\)
 # LDFLAGS += -Wl,--section-start=.extradata=0x6000

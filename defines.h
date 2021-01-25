@@ -7,6 +7,13 @@
 //YOUR GLOBAL DEFINES HERE:
 #include "libraries/API/tinyusbboard.h"
 
+#define DUMMY_PORTONE   B,0
+#define DUMMY_PORTTWO   C,0
+#define DUMMY_PORTTHREE C,0
+#define DUMMY_PORTFOUR  C,0
+
+
+
 /* extend iocomfort */
 typedef unsigned char  u8;
 struct __bits 
@@ -18,4 +25,13 @@ struct __bits
 #define	_internal_SBIT_OF(letter, bit)		DEFCONCAT(b, bit)
 #define SBIT(pin) ((*(volatile struct __bits*)&_internal_PORT_OF(pin))._internal_SBIT_OF(pin))
 
+ /* tell the compiler to block the registers and avoid generating code with them */
+register u8 __register2 asm ("r2");
+register u8 __register3 asm ("r3");
+register u8 __register4 asm ("r4");
+register u8 __register5 asm ("r5");
+#define CONFIG_CPUCONTEXT_NO_R2
+#define CONFIG_CPUCONTEXT_NO_R3
+#define CONFIG_CPUCONTEXT_NO_R4
+#define CONFIG_CPUCONTEXT_NO_R5
 #endif

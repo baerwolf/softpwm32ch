@@ -23,6 +23,14 @@
 
 #include <util/delay.h>
 
+#ifndef SOFTPWM_INSANE_OPTIMIZATION
+#   define SOFTPWM_INSANE_OPTIMIZATION 0
+#endif
+#ifndef SOFTPWM_UPDATECYCLES
+#   define SOFTPWM_UPDATECYCLES    (32 /*must not be smaller than 32*/)
+#endif
+static uint8_t __attribute__ ((used,aligned(256))) pwmseq[256];
+
 
 // hardware depended - only avrs for tinyusbboard at the moment //
 #if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__) || \
@@ -35,13 +43,27 @@
      defined (__AVR_ATmega1284__)|| defined (__AVR_ATmega1284P__)||                                 defined (__AVR_ATmega32__)    || \
    0)
 void __hwclock_timer_init(void) {
+#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+  OCR2=SOFTPWM_UPDATECYCLES; /* cyles to PWM update */
+#else
+  OCR2A=SOFTPWM_UPDATECYCLES; /* cyles to PWM update */
+#endif
   OCR1A=0xffff;
   OCR1B=0x8000;
+  TCNT2=0;
   TCNT1=0;
   TCNT0=0;
 }
 
 void __hwclock_timer_start(void) {
+//TIMER2
+#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+  TCCR2=0b00001001;
+#else
+  TCCR2A=0b0000001;
+  TCCR2B=0b0000001;
+#endif
+
 //PWM TIMER1 (R&G)
   TCCR1A=0b00000000;
   TCCR1B=0b00000100;
@@ -99,11 +121,122 @@ void __hwclock_timer_start(void) {
       : "r20", "r19", "r18"
            );
 } /* end of hardware selected "__hwclock_timer_start" */
+
+#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+#   define SOFTPWM_ENABLE(x)   TIMSK|=_BV(OCIE2)
+#   define SOFTPWM_DISABLE(x)  TIMSK&=~(_BV(OCIE2))
+#else
+#   define SOFTPWM_ENABLE(x)   TIMSK2|=_BV(OCIE2A)
+#   define SOFTPWM_DISABLE(x)  TIMSK2&=~(_BV(OCIE2A))
+#endif
 #else
 #	error unsupported AVR
 #endif
-///////////////////////////////////////////////////////
 
+
+#if (SOFTPWM_INSANE_OPTIMIZATION)
+void __attribute__ ((section(".vectors"),naked,used,no_instrument_function)) __reset__(void);
+void __attribute__ ((section (".init0"),naked,used,no_instrument_function)) __startup(void);
+int main(void) __attribute__ ((OS_main, section (".init9")));
+void __reset__(void) { /* fake __vectors */
+       asm volatile (
+               "rjmp __startup\n\t"
+/* the following is extremly hardware depended - we basically need to do it for every AVRs individually */
+#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+               ".space 4        \n\t" /*=NOP*/
+#elif (defined (__AVR_ATmega88__) || defined (__AVR_ATmega88P__) || defined (__AVR_ATmega88A__) || defined (__AVR_ATmega88PA__))
+               ".space 12       \n\t"
+#elif (defined (__AVR_ATmega168__) || defined (__AVR_ATmega168P__) || defined (__AVR_ATmega168A__) || defined (__AVR_ATmega168PA__) ||\
+       defined (__AVR_ATmega328__) || defined (__AVR_ATmega328P__) || defined (__AVR_ATmega328A__) || defined (__AVR_ATmega328PA__))
+               ".space 26       \n\t"
+#else
+#error unknown AVR - can not optimize. Please deactivate "SOFTPWM_INSANE_OPTIMIZATION"
+#endif
+               :
+               :
+       );
+#else
+/* A = {r2:r3}    B = {r4:r5}                */
+/*                                           */
+/* X --> B                                   */
+/*       A --> X                             */
+/*  since A is aligned and exactly 256byte   */
+/*               r3 (hi(A)) can not change   */
+/* ***************************************** */
+/* SREG is not saved - only few ops allowed  */
+/* !! WE MUST NOT USE SREG CHANGING ISNS !!  */
+/* ***************************************** */
+#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+ISR(TIMER2_COMP_vect, ISR_NAKED) {
+#else
+ISR(TIMER2_COMPA_vect, ISR_NAKED) {
+#endif
+#endif
+    asm volatile (
+        /* backup X register */
+        "movw	r4      ,		r26                     \n\t" /* movw B  , X       --> 1 */
+
+        /* prepare X pointer */
+        "ldi    r27     ,       hi8(%[pwmptr])          \n\t" /* ldi Xhi, static   --> 1 */
+        "mov	r26     ,	    r2                      \n\t" /* mov Xlo , Alo     --> 1 */
+
+        /* since we havn't restored X from Ahi, we use it as temp */
+        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
+        "out    %[portone] ,    r3                      \n\t" /* out PORTone, Ahi  --> 1 */
+        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
+        "out    %[porttwo] ,    r3                      \n\t" /* out PORTtwo, Ahi  --> 1 */
+        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
+        "out    %[portthree] ,  r3                      \n\t" /* out PORTthree, Ahi--> 1 */
+        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
+        "out    %[portfour] ,   r3                      \n\t" /* out PORTfour, Ahi --> 1 */
+
+        /* update r2 - subiw might modify sreg - so read it from lo(X) */
+        "mov    r2      ,       r26                     \n\t" /* mov Alo, Xlo      --> 1 */
+
+        /* recover X register */
+        "movw	r26     ,		r4                      \n\t" /* movw X  , B       --> 1 */
+
+        /* return from isr */
+        "reti                                           \n\t" /*                   --> 5 */
+        :
+        : [pwmptr]	 "i"	(pwmseq),
+          [portone]	 "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTONE))),
+          [porttwo]	 "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTTWO))),
+          [portthree] "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTTHREE))),
+          [portfour] "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTFOUR))),
+          [sreg]	 "i"	(_SFR_IO_ADDR(SREG))
+    );
+}
+#if (SOFTPWM_INSANE_OPTIMIZATION)
+void __startup(void) {
+       /* since we optimized the fuck out of this, we need to implement now our own basic startup code */
+       asm volatile (
+               /* prepare zero-reg and initialize sreg */
+               "clr __zero_reg__\n\t"
+               "out %[sreg], __zero_reg__\n\t"
+               /* initialize stack */
+               "ldi r29, %[ramendhi]\n\t"
+               "ldi r28, %[ramendlo]\n\t"
+               "out %[sphreg], r29\n\t"
+               "out %[splreg], r28\n\t"
+
+               /* initialize all static variables */
+               "rjmp __do_copy_data\n\t"
+               :
+               : [ramendhi]     "M"     (((RAMEND) >> 8) & 0xff),
+                 [ramendlo]     "M"     (((RAMEND) >> 0) & 0xff),
+                 [sphreg]       "i"	(_SFR_IO_ADDR(SPH)),
+                 [splreg]       "i"	(_SFR_IO_ADDR(SPL)),
+                 [sreg]	        "i"	(_SFR_IO_ADDR(SREG))
+       );
+}
+#endif
+
+void softpwm_init(void) {
+    asm volatile (
+        "clr r2\n\t"
+    );
+}
 
 void init_cpu(void) {
   cli();
@@ -120,7 +253,22 @@ int main(void) {
   EXTFUNC_callByName(cpucontext_initialize);
   EXTFUNC_callByName(hwclock_initialize);
 
+  softpwm_init();
+
+  CFG_OUTPUT(LED_RIGHT);
+  DDRB=0xff;
+  {
+      uint8_t i;
+      for (i=0;i<32;i+=4) pwmseq[i]=2;
+  }
+  pwmseq[0]=3;
+  sei();
+  SOFTPWM_ENABLE();
   while (1) {
+      int i;
+      /* demonstrate slowing down normal processing due to ISR */
+      for (i=0;i<16384;i++) asm volatile("nop");
+      TOGGLE(LED_RIGHT);
   }
 
   EXTFUNC_callByName(hwclock_finalize);
