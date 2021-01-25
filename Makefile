@@ -10,7 +10,7 @@ HFUSE  = 0xd9
 LFUSE  = 0xe1
 
 # the frequency the microcontroller is clocked with
-F_CPU = 1000000
+F_CPU = 16000000
 
 # extra data section
 # DEFINES += -D__AVR_LIBC_DEPRECATED_ENABLE__
@@ -47,7 +47,7 @@ AVRDUDE_FUSE += -U efuse:w:$(EFUSE):m
 endif
 
 
-MYCFLAGS = -Wall -g3 -ggdb -Os -fno-move-loop-invariants -fno-tree-scev-cprop -fno-inline-small-functions -ffunction-sections -fdata-sections -I. -Isource -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) $(CFLAGS)   $(DEFINES)
+MYCFLAGS = -Wall -g3 -ggdb -Os -fno-move-loop-invariants -fno-tree-scev-cprop -fno-inline-small-functions -ffunction-sections -fdata-sections -I. -Isource -Ilibraries/API -Ilibraries/avrlibs-baerwolf/include -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) $(CFLAGS)   $(DEFINES)
 MYLDFLAGS = -Wl,--relax,--gc-sections $(LDFLAGS)
 
 
@@ -86,6 +86,32 @@ EXTRADEP = Makefile
 all: release/main.hex release/eeprom.hex release/main.bin release/eeprom.bin release/main.asm build/main.asm
 
 
+build/apipage.S: libraries/API/apipage.c $(STDDEP) $(EXTRADEP)
+	$(CC) libraries/API/apipage.c -S -o build/apipage.S $(MYCFLAGS)
+
+build/apipage.o: build/apipage.S $(STDDEP) $(EXTRADEP)
+	$(CC) build/apipage.S -c -o build/apipage.o $(MYCFLAGS)
+
+
+build/extfunc.S: libraries/avrlibs-baerwolf/source/extfunc.c $(STDDEP) $(EXTRADEP)
+	$(CC) libraries/avrlibs-baerwolf/source/extfunc.c -S -o build/extfunc.S $(MYCFLAGS)
+
+build/extfunc.o: build/extfunc.S $(STDDEP) $(EXTRADEP)
+	$(CC) build/extfunc.S -c -o build/extfunc.o $(MYCFLAGS)
+
+build/cpucontext.S: libraries/avrlibs-baerwolf/source/cpucontext.c $(STDDEP) $(EXTRADEP)
+	$(CC) libraries/avrlibs-baerwolf/source/cpucontext.c -S -o build/cpucontext.S $(MYCFLAGS)
+
+build/cpucontext.o: build/cpucontext.S $(STDDEP) $(EXTRADEP)
+	$(CC) build/cpucontext.S -c -o build/cpucontext.o $(MYCFLAGS)
+
+build/hwclock.S: libraries/avrlibs-baerwolf/source/hwclock.c $(STDDEP) $(EXTRADEP)
+	$(CC) libraries/avrlibs-baerwolf/source/hwclock.c -S -o build/hwclock.S $(MYCFLAGS)
+
+build/hwclock.o: build/hwclock.S $(STDDEP) $(EXTRADEP)
+	$(CC) build/hwclock.S -c -o build/hwclock.o $(MYCFLAGS)
+
+
 
 build/main.o: source/main.c $(STDDEP) $(EXTRADEP)
 	$(CC) source/main.c -c -o build/main.o $(MYCFLAGS)
@@ -94,7 +120,7 @@ build/main.o: source/main.c $(STDDEP) $(EXTRADEP)
 
 
 
-MYOBJECTS = build/main.o
+MYOBJECTS = build/main.o build/apipage.o build/extfunc.o build/cpucontext.o build/hwclock.o
 release/main.elf: $(MYOBJECTS) $(STDDEP) $(EXTRADEP)
 	$(CC) $(MYOBJECTS) -o release/main.elf $(MYCFLAGS) -Wl,-Map,release/main.map $(MYLDFLAGS)
 	$(ECHO) "."
