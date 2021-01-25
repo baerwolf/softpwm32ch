@@ -156,7 +156,7 @@ void __reset__(void) { /* fake __vectors */
                :
        );
 #else
-/* A = {r2:r3}    B = {r4:r5}                */
+/* A = {r2:r3}    B = {r4:r5}     TEMP = r6  */
 /*                                           */
 /* X --> B                                   */
 /*       A --> X                             */
@@ -177,20 +177,19 @@ ISR(TIMER2_COMPA_vect, ISR_NAKED) {
         "movw	r4      ,		r26                     \n\t" /* movw B  , X       --> 1 */
 
         /* prepare X pointer */
-        "ldi    r27     ,       hi8(%[pwmptr])          \n\t" /* ldi Xhi, static   --> 1 */
-        "mov	r26     ,	    r2                      \n\t" /* mov Xlo , Alo     --> 1 */
+        "movw   r26     ,       r2                      \n\t" /* movw X  , A       --> 1 */
 
         /* since we havn't restored X from Ahi, we use it as temp */
-        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
-        "out    %[portone] ,    r3                      \n\t" /* out PORTone, Ahi  --> 1 */
-        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
-        "out    %[porttwo] ,    r3                      \n\t" /* out PORTtwo, Ahi  --> 1 */
-        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
-        "out    %[portthree] ,  r3                      \n\t" /* out PORTthree, Ahi--> 1 */
-        "ld     r3      ,       X+                      \n\t" /* ldd Ahi, X+       --> 2 */
-        "out    %[portfour] ,   r3                      \n\t" /* out PORTfour, Ahi --> 1 */
+        "ld     r6      ,       X+                      \n\t" /* ldd tmp, X+       --> 2 */
+        "out    %[portone] ,    r6                      \n\t" /* out PORTone, tmp  --> 1 */
+        "ld     r6      ,       X+                      \n\t" /* ldd tmp, X+       --> 2 */
+        "out    %[porttwo] ,    r6                      \n\t" /* out PORTtwo, tmp  --> 1 */
+        "ld     r6      ,       X+                      \n\t" /* ldd tmp, X+       --> 2 */
+        "out    %[portthree] ,  r6                      \n\t" /* out PORTthree, tmp--> 1 */
+        "ld     r6      ,       X+                      \n\t" /* ldd tmp, X+       --> 2 */
+        "out    %[portfour] ,   r6                      \n\t" /* out PORTfour, tmp --> 1 */
 
-        /* update r2 - subiw might modify sreg - so read it from lo(X) */
+        /* update only r2 to delete possible overflow - since A is aligned and exactly 256byte */
         "mov    r2      ,       r26                     \n\t" /* mov Alo, Xlo      --> 1 */
 
         /* recover X register */
@@ -199,8 +198,7 @@ ISR(TIMER2_COMPA_vect, ISR_NAKED) {
         /* return from isr */
         "reti                                           \n\t" /*                   --> 5 */
         :
-        : [pwmptr]	 "i"	(pwmseq),
-          [portone]	 "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTONE))),
+        : [portone]	 "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTONE))),
           [porttwo]	 "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTTWO))),
           [portthree] "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTTHREE))),
           [portfour] "i"	(_SFR_IO_ADDR(PORT_OF(DUMMY_PORTFOUR))),
@@ -232,9 +230,11 @@ void __startup(void) {
 }
 #endif
 
-void softpwm_init(void) {
+void softpwm_configure(void *__thepwmseq) {
     asm volatile (
-        "clr r2\n\t"
+        "movw r2, r26\n\t"
+        :
+        : [tps] "x"	(__thepwmseq)
     );
 }
 
@@ -253,7 +253,7 @@ int main(void) {
   EXTFUNC_callByName(cpucontext_initialize);
   EXTFUNC_callByName(hwclock_initialize);
 
-  softpwm_init();
+  softpwm_configure(pwmseq);
 
   CFG_OUTPUT(LED_RIGHT);
   DDRB=0xff;

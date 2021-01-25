@@ -30,8 +30,10 @@ register u8 __register2 asm ("r2");
 register u8 __register3 asm ("r3");
 register u8 __register4 asm ("r4");
 register u8 __register5 asm ("r5");
+register u8 __register6 asm ("r6");
 #define CONFIG_CPUCONTEXT_NO_R2
 #define CONFIG_CPUCONTEXT_NO_R3
 #define CONFIG_CPUCONTEXT_NO_R4
 #define CONFIG_CPUCONTEXT_NO_R5
+#define CONFIG_CPUCONTEXT_NO_R6
 #endif
