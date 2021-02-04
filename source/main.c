@@ -46,11 +46,11 @@ static uint8_t __attribute__ ((used,aligned(256))) pwmseq[256];
      defined (__AVR_ATmega164__) || defined (__AVR_ATmega164P__) || defined (__AVR_ATmega164A__) || defined (__AVR_ATmega164PA__) || \
      defined (__AVR_ATmega324__) || defined (__AVR_ATmega324P__) || defined (__AVR_ATmega324A__) || defined (__AVR_ATmega324PA__) || \
      defined (__AVR_ATmega644__) || defined (__AVR_ATmega644P__) || defined (__AVR_ATmega644A__) || defined (__AVR_ATmega644PA__) || \
-     defined (__AVR_ATmega1284__)|| defined (__AVR_ATmega1284P__)||                                 defined (__AVR_ATmega32__)    || \
+     defined (__AVR_ATmega1284__)|| defined (__AVR_ATmega1284P__)|| defined (__AVR_ATmega16__)   || defined (__AVR_ATmega32__)    || \
    0)
 void __hwclock_timer_init(void) {
 #if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__) || \
-    defined (__AVR_ATmega128__) || defined (__AVR_ATmega103__) || defined (__AVR_ATmega32__))
+    defined (__AVR_ATmega128__) || defined (__AVR_ATmega103__) || defined (__AVR_ATmega16__) || defined (__AVR_ATmega32__))
 #define __AVR_mylegacy 1
   OCR2=SOFTPWM_UPDATECYCLES; /* cyles to PWM update */
 #else
@@ -154,6 +154,8 @@ void __reset__(void) { /* fake __vectors */
                ".space 4        \n\t" /*=NOP*/
 #elif (defined (__AVR_ATmega128__) || defined (__AVR_ATmega103__))
                ".space 34       \n\t"
+#elif (defined (__AVR_ATmega16__))
+               ".space 10       \n\t"
 #elif (defined (__AVR_ATmega32__))
                ".space 14       \n\t"
 #elif (defined (__AVR_ATmega88__) || defined (__AVR_ATmega88P__) || defined (__AVR_ATmega88A__) || defined (__AVR_ATmega88PA__))
