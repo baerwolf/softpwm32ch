@@ -161,6 +161,11 @@ void __reset__(void) { /* fake __vectors */
 #elif (defined (__AVR_ATmega168__) || defined (__AVR_ATmega168P__) || defined (__AVR_ATmega168A__) || defined (__AVR_ATmega168PA__) ||\
        defined (__AVR_ATmega328__) || defined (__AVR_ATmega328P__) || defined (__AVR_ATmega328A__) || defined (__AVR_ATmega328PA__))
                ".space 26       \n\t"
+#elif (defined (__AVR_ATmega164__) || defined (__AVR_ATmega164P__) || defined (__AVR_ATmega164A__) || defined (__AVR_ATmega164PA__) || \
+       defined (__AVR_ATmega324__) || defined (__AVR_ATmega324P__) || defined (__AVR_ATmega324A__) || defined (__AVR_ATmega324PA__) || \
+       defined (__AVR_ATmega644__) || defined (__AVR_ATmega644P__) || defined (__AVR_ATmega644A__) || defined (__AVR_ATmega644PA__) || \
+       defined (__AVR_ATmega1284__)|| defined (__AVR_ATmega1284P__))
+               ".space 34       \n\t"
 #else
 #error unknown AVR - can not optimize. Please deactivate "SOFTPWM_INSANE_OPTIMIZATION"
 #endif
