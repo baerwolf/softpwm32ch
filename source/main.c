@@ -4,7 +4,12 @@
 #define __MAIN_C_dc83edef7fb74d0f88488010fe346ac7	1
 
 #include "main.h"
-#include "libraries/API/apipage.h"
+#ifdef __AVR_ATmega103__
+    #ifndef SPM_PAGESIZE
+        #define SPM_PAGESIZE (0)
+    #endif
+#endif
+// #include "libraries/API/apipage.h"
 #include "libraries/avrlibs-baerwolf/include/extfunc.h"
 #include "libraries/avrlibs-baerwolf/include/hwclock.h"
 #include "libraries/avrlibs-baerwolf/include/cpucontext.h"
@@ -34,6 +39,7 @@ static uint8_t __attribute__ ((used,aligned(256))) pwmseq[256];
 
 // hardware depended - only avrs for tinyusbboard at the moment //
 #if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__) || \
+     defined (__AVR_ATmega128__) || defined (__AVR_ATmega103__) || \
      defined (__AVR_ATmega88__) || defined (__AVR_ATmega88P__) || defined (__AVR_ATmega88A__) || defined (__AVR_ATmega88PA__) || \
      defined (__AVR_ATmega168__) || defined (__AVR_ATmega168P__) || defined (__AVR_ATmega168A__) || defined (__AVR_ATmega168PA__) || \
      defined (__AVR_ATmega328__) || defined (__AVR_ATmega328P__) || defined (__AVR_ATmega328A__) || defined (__AVR_ATmega328PA__) || \
@@ -43,7 +49,9 @@ static uint8_t __attribute__ ((used,aligned(256))) pwmseq[256];
      defined (__AVR_ATmega1284__)|| defined (__AVR_ATmega1284P__)||                                 defined (__AVR_ATmega32__)    || \
    0)
 void __hwclock_timer_init(void) {
-#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__) || \
+    defined (__AVR_ATmega128__) || defined (__AVR_ATmega103__))
+#define __AVR_mylegacy 1
   OCR2=SOFTPWM_UPDATECYCLES; /* cyles to PWM update */
 #else
   OCR2A=SOFTPWM_UPDATECYCLES; /* cyles to PWM update */
@@ -57,7 +65,7 @@ void __hwclock_timer_init(void) {
 
 void __hwclock_timer_start(void) {
 //TIMER2
-#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+#if (defined(__AVR_mylegacy))
   TCCR2=0b00001001;
 #else
   TCCR2A=0b0000001;
@@ -69,7 +77,7 @@ void __hwclock_timer_start(void) {
   TCCR1B=0b00000100;
 
 //TIMER0
-#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+#if (defined (__AVR_mylegacy))
   TCCR0 =0b00000001; /* activate timer0 running */
 #else /* not atmega8 */
   TCCR0B=0b00000001; /* activate timer0 running */
@@ -122,7 +130,7 @@ void __hwclock_timer_start(void) {
            );
 } /* end of hardware selected "__hwclock_timer_start" */
 
-#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+#if (defined (__AVR_mylegacy))
 #   define SOFTPWM_ENABLE(x)   TIMSK|=_BV(OCIE2)
 #   define SOFTPWM_DISABLE(x)  TIMSK&=~(_BV(OCIE2))
 #else
@@ -144,6 +152,8 @@ void __reset__(void) { /* fake __vectors */
 /* the following is extremly hardware depended - we basically need to do it for every AVRs individually */
 #if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
                ".space 4        \n\t" /*=NOP*/
+#elif (defined (__AVR_ATmega128__) || defined (__AVR_ATmega103__))
+               ".space 34       \n\t"
 #elif (defined (__AVR_ATmega88__) || defined (__AVR_ATmega88P__) || defined (__AVR_ATmega88A__) || defined (__AVR_ATmega88PA__))
                ".space 12       \n\t"
 #elif (defined (__AVR_ATmega168__) || defined (__AVR_ATmega168P__) || defined (__AVR_ATmega168A__) || defined (__AVR_ATmega168PA__) ||\
@@ -166,18 +176,32 @@ void __reset__(void) { /* fake __vectors */
 /* SREG is not saved - only few ops allowed  */
 /* !! WE MUST NOT USE SREG CHANGING ISNS !!  */
 /* ***************************************** */
-#if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__))
+#if (defined (__AVR_mylegacy))
 ISR(TIMER2_COMP_vect, ISR_NAKED) {
 #else
 ISR(TIMER2_COMPA_vect, ISR_NAKED) {
 #endif
 #endif
     asm volatile (
+#ifdef __AVR_HAVE_MOVW__
         /* backup X register */
         "movw	r4      ,		r26                     \n\t" /* movw B  , X       --> 1 */
 
         /* prepare X pointer */
         "movw   r26     ,       r2                      \n\t" /* movw X  , A       --> 1 */
+#else
+# if (SOFTPWM_UPDATECYCLES < (32+3))
+        /* without movw this is slower */
+#       warning "SOFTPWM_UPDATECYCLES" might be too low
+# endif
+        /* backup X register */
+        "mov    r4      ,       r26                     \n\t" /* mov  Blo  , Xlo   --> 1 */
+        "mov    r5      ,       r27                     \n\t" /* mov  Bhi  , Xhi   --> 1 */
+
+        /* prepare X pointer */
+        "mov    r26     ,       r2                      \n\t" /* mov  Xlo  , Alo   --> 1 */
+        "mov    r27     ,       r3                      \n\t" /* mov  Xhi  , Ahi   --> 1 */
+#endif
 
         /* since we havn't restored X from Ahi, we use it as temp */
         "ld     r6      ,       X+                      \n\t" /* ldd tmp, X+       --> 2 */
@@ -193,7 +217,12 @@ ISR(TIMER2_COMPA_vect, ISR_NAKED) {
         "mov    r2      ,       r26                     \n\t" /* mov Alo, Xlo      --> 1 */
 
         /* recover X register */
+#ifdef __AVR_HAVE_MOVW__
         "movw	r26     ,		r4                      \n\t" /* movw X  , B       --> 1 */
+#else
+        "mov    r26     ,       r4                      \n\t" /* mov  Xlo  , Blo   --> 1 */
+        "mov    r27     ,       r5                      \n\t" /* mov  Xhi  , Bhi   --> 1 */
+#endif
 
         /* return from isr */
         "reti                                           \n\t" /*                   --> 5 */
@@ -232,7 +261,12 @@ void __startup(void) {
 
 void softpwm_configure(void *__thepwmseq) {
     asm volatile (
+#ifdef __AVR_HAVE_MOVW__
         "movw r2, r26\n\t"
+#else
+        "mov  r2, r26\n\t"
+        "mov  r3, r27\n\t"
+#endif
         :
         : [tps] "x"	(__thepwmseq)
     );
@@ -275,6 +309,6 @@ int main(void) {
   EXTFUNC_callByName(cpucontext_finalize);
   extfunc_finalize();
 
-  bootloader_startup();
+//   bootloader_startup();
   return 0;
 }

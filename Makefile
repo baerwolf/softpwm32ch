@@ -17,7 +17,7 @@ DEFINES += -DCPUCONTEXTINCLUDEDEFINES
 DEFINES += -DSOFTPWM_UPDATECYCLES=32
 #DEFINES += -DSOFTPWM_INSANE_OPTIMIZATION=1 -nostartfiles
 
-# DEFINES += -D__AVR_LIBC_DEPRECATED_ENABLE__
+DEFINES += -D__AVR_LIBC_DEPRECATED_ENABLE__
 # DEFINES += -DDATASECTION=__attribute__\ \(\(section\ \(\".extradata\"\)\)\)
 # LDFLAGS += -Wl,--section-start=.extradata=0x6000
 
@@ -90,11 +90,11 @@ EXTRADEP = Makefile
 all: release/main.hex release/eeprom.hex release/main.bin release/eeprom.bin release/main.asm build/main.asm
 
 
-build/apipage.S: libraries/API/apipage.c $(STDDEP) $(EXTRADEP)
-	$(CC) libraries/API/apipage.c -S -o build/apipage.S $(MYCFLAGS)
-
-build/apipage.o: build/apipage.S $(STDDEP) $(EXTRADEP)
-	$(CC) build/apipage.S -c -o build/apipage.o $(MYCFLAGS)
+# build/apipage.S: libraries/API/apipage.c $(STDDEP) $(EXTRADEP)
+# 	$(CC) libraries/API/apipage.c -S -o build/apipage.S $(MYCFLAGS)
+#
+# build/apipage.o: build/apipage.S $(STDDEP) $(EXTRADEP)
+# 	$(CC) build/apipage.S -c -o build/apipage.o $(MYCFLAGS)
 
 
 build/extfunc.S: libraries/avrlibs-baerwolf/source/extfunc.c $(STDDEP) $(EXTRADEP)
@@ -124,7 +124,8 @@ build/main.o: source/main.c $(STDDEP) $(EXTRADEP)
 
 
 
-MYOBJECTS = build/main.o build/apipage.o build/extfunc.o build/cpucontext.o build/hwclock.o
+#MYOBJECTS = build/main.o build/apipage.o build/extfunc.o build/cpucontext.o build/hwclock.o
+MYOBJECTS = build/main.o build/extfunc.o build/cpucontext.o build/hwclock.o
 release/main.elf: $(MYOBJECTS) $(STDDEP) $(EXTRADEP)
 	$(CC) $(MYOBJECTS) -o release/main.elf $(MYCFLAGS) -Wl,-Map,release/main.map $(MYLDFLAGS)
 	$(ECHO) "."
