@@ -35,7 +35,8 @@
 #   define SOFTPWM_UPDATECYCLES    (32 /*must not be smaller than 32*/)
 #endif
 static uint8_t __attribute__ ((used,aligned(256))) pwmseq[256];
-
+static uint8_t __attribute__ ((used,aligned(256))) pwmseqalternative[256];
+static uint8_t *pwmframe[2] = {pwmseq, pwmseqalternative};
 
 // hardware depended - only avrs for tinyusbboard at the moment //
 #if (defined (__AVR_ATmega8__) || defined (__AVR_ATmega8A__) || \
@@ -133,9 +134,13 @@ void __hwclock_timer_start(void) {
 #if (defined (__AVR_mylegacy))
 #   define SOFTPWM_ENABLE(x)   TIMSK|=_BV(OCIE2)
 #   define SOFTPWM_DISABLE(x)  TIMSK&=~(_BV(OCIE2))
+#   define SOFTPWM_WAITPENDING(x) {while ((TIFR & _BV(OCF2))) { _NOP();}}
+#   define SOFTPWM_CLEARPENDING(x) {if (TIFR & _BV(OCF2)) TIFR|=_BV(OCF2);}
 #else
 #   define SOFTPWM_ENABLE(x)   TIMSK2|=_BV(OCIE2A)
 #   define SOFTPWM_DISABLE(x)  TIMSK2&=~(_BV(OCIE2A))
+#   define SOFTPWM_WAITPENDING(x) {while ((TIFR2 & _BV(OCF2A))) { _NOP();}}
+#   define SOFTPWM_CLEARPENDING(x) {if (TIFR2 & _BV(OCF2A)) TIFR2|=_BV(OCF2A);}
 #endif
 #else
 #	error unsupported AVR
@@ -281,6 +286,33 @@ void softpwm_configure(void *__thepwmseq) {
     );
 }
 
+void softpwm_disable__finishCycle_spinloop(void) {
+    asm volatile (
+        "ldi r16, 252\n\t"
+        "mov __tmp_reg__, r16\n\t"
+        "lds  r16, %[timsk]\n\t"
+        "andi r16, %[ocie2val]\n\t"
+        "softpwm_disable__finishCycle_spinloop_loopA%=:\n\t"
+        "cp   r2, __tmp_reg__\n\t"
+        "brne softpwm_disable__finishCycle_spinloop_loopA%=\n\t"
+        //since here a magic countup must be happening due to pwm isr
+        "softpwm_disable__finishCycle_spinloop_loopB%=:\n\t"
+        "tst  r2\n\t"
+        "brne softpwm_disable__finishCycle_spinloop_loopB%=\n\t"
+        "sts %[timsk], r16\n\t"
+        :
+#if (defined (__AVR_mylegacy))
+        : [timsk]		"i"      (_SFR_MEM_ADDR(TIMSK)),
+          [ocie2val]    "M"      ((~(_BV(OCIE2))) & 0xff)
+#else
+        : [timsk]		"i"      (_SFR_MEM_ADDR(TIMSK2)),
+          [ocie2val]    "M"      ((~(_BV(OCIE2A))) & 0xff)
+#endif
+        : "r16"
+    );
+}
+
+
 void init_cpu(void) {
   cli();
   bootupreason=MCUBOOTREASONREG;
@@ -288,7 +320,56 @@ void init_cpu(void) {
   wdt_disable();
 }
 
+uint8_t getexponent(uint8_t value) {
+    uint8_t result;
+    for (result=0;result<6;result++) {
+        if (value & 0x1) break;
+        value>>=1;
+    }
+    return result;
+}
+
+void softpwm_setchannel(uint8_t *pwmseq_to_modify, uint8_t channel, uint8_t value) {
+    uint8_t i,j,period,bithigh, bitlow;
+
+    channel&=0x1f; //cut to 32channels
+    bitlow=channel&0x7;
+    bithigh=_BV(bitlow);
+    bitlow=~(bithigh);
+    channel>>=3;
+
+    if (value < 64) {
+#if (1)
+        period=getexponent(value);
+        value>>=period;
+        period=64>>period;
+#else
+        period=64;
+#endif
+    } else {
+        value=64;
+        period=64;
+    }
+
+    i=0; j=0;
+    do {
+        if (j>=period) j=0;
+        if (j<value) {
+            // channel output high setzten
+            pwmseq_to_modify[i+channel]|=bithigh;
+        } else {
+            // channel output low
+            pwmseq_to_modify[i+channel]&=bitlow;
+        }
+
+        j++;
+        i+=4;
+    } while (i!=0);
+}
+
+
 int main(void) {
+  uint8_t buffer=0;
   init_cpu();
 
   // YOUR CODE HERE:
@@ -296,21 +377,32 @@ int main(void) {
   EXTFUNC_callByName(cpucontext_initialize);
   EXTFUNC_callByName(hwclock_initialize);
 
+  memset(pwmseq, 0, sizeof(pwmseq));
+  memset(pwmseqalternative, 0, sizeof(pwmseqalternative));
   softpwm_configure(pwmseq);
 
   CFG_OUTPUT(LED_RIGHT);
-  DDRB=0xff;
-  {
-      uint8_t i;
-      for (i=0;i<32;i+=4) pwmseq[i]=2;
-  }
-  pwmseq[0]=3;
+  DDR_OF(DUMMY_PORTONE)  =0xff;
+  DDR_OF(DUMMY_PORTTWO)  =0xff;
+  DDR_OF(DUMMY_PORTTHREE)=0xff;
+  DDR_OF(DUMMY_PORTFOUR) =0xff;
+
+  softpwm_setchannel(pwmseq           , 0, 9);
+  softpwm_setchannel(pwmseqalternative, 7, 17);
+
   sei();
   SOFTPWM_ENABLE();
   while (1) {
       int i;
+      buffer=1-buffer; /* switch to double buffer */
+
       /* demonstrate slowing down normal processing due to ISR */
       for (i=0;i<16384;i++) asm volatile("nop");
+
+      softpwm_disable__finishCycle_spinloop();
+      SOFTPWM_CLEARPENDING();
+      softpwm_configure(pwmframe[buffer]);
+      SOFTPWM_ENABLE();
       TOGGLE(LED_RIGHT);
   }
 
