@@ -367,9 +367,10 @@ void softpwm_setchannel(uint8_t *pwmseq_to_modify, uint8_t channel, uint8_t valu
     } while (i!=0);
 }
 
-
+#define DELAYTICKS (HWCLOCK_UStoTICK(100000))
 int main(void) {
   uint8_t buffer=0;
+  hwclock_time_t last, now;
   init_cpu();
 
   // YOUR CODE HERE:
@@ -392,18 +393,25 @@ int main(void) {
 
   sei();
   SOFTPWM_ENABLE();
+  last=EXTFUNC_callByName(hwclock_now);
   while (1) {
-      int i;
-      buffer=1-buffer; /* switch to double buffer */
+      uint32_t passedticks;
+
+      now=EXTFUNC_callByName(hwclock_now);
+      passedticks=EXTFUNC_callByName(hwclock_tickspassed, last, now);
 
       /* demonstrate slowing down normal processing due to ISR */
-      for (i=0;i<16384;i++) asm volatile("nop");
+      if (passedticks >= DELAYTICKS) {
+        buffer=1-buffer; /* switch to double buffer */
 
-      softpwm_disable__finishCycle_spinloop();
-      SOFTPWM_CLEARPENDING();
-      softpwm_configure(pwmframe[buffer]);
-      SOFTPWM_ENABLE();
-      TOGGLE(LED_RIGHT);
+        softpwm_disable__finishCycle_spinloop();
+        SOFTPWM_CLEARPENDING();
+        softpwm_configure(pwmframe[buffer]);
+        SOFTPWM_ENABLE();
+        TOGGLE(LED_RIGHT);
+
+        last=EXTFUNC_callByName(hwclock_modify, last, DELAYTICKS);
+      }
   }
 
   EXTFUNC_callByName(hwclock_finalize);
