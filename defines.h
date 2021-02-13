@@ -26,6 +26,8 @@ struct __bits
 #define SBIT(pin) ((*(volatile struct __bits*)&_internal_PORT_OF(pin))._internal_SBIT_OF(pin))
 
  /* tell the compiler to block the registers and avoid generating code with them */
+ /* check for corruptions via "cat release/main.asm | egrep -in r2[^0123456789]\|r2$" */
+#define __HWCLKTMP "r10"
 register u8 __register2 asm ("r2");
 register u8 __register3 asm ("r3");
 register u8 __register4 asm ("r4");

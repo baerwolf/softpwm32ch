@@ -13,9 +13,15 @@ LFUSE  = 0xe1
 F_CPU = 16000000
 
 # extra data section
-DEFINES += -DCPUCONTEXTINCLUDEDEFINES
+DEFINES += -DCPUCONTEXTINCLUDEDEFINES -DHWCLOCKINCLUDEDEFINES -DEXTFUNCINCLUDEDEFINES
 DEFINES += -DSOFTPWM_UPDATECYCLES=32
 #DEFINES += -DSOFTPWM_INSANE_OPTIMIZATION=1 -nostartfiles
+
+# DEFINES += -DEXTFUNC_NOEXT=0
+# DEFINES += -DCPUCONTEXT_EXTRASYMBOLS=1
+# DEFINES += -DEXTFUNCFAR=__attribute__\ \(\(section\ \(\".farfunc\"\)\)\) -Wl,--section-start=.farfunc=0x1F800
+# DEFINES += -DEXTFUNCNEAR=PROGMEM
+# DEFINES += -DEXTFUNCNEAR=__attribute__\ \(\(section\ \(\".nearfunc\"\)\)\) -Wl,--section-start=.nearfunc=0x1000
 
 DEFINES += -D__AVR_LIBC_DEPRECATED_ENABLE__
 # DEFINES += -DDATASECTION=__attribute__\ \(\(section\ \(\".extradata\"\)\)\)
