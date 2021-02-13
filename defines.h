@@ -7,11 +7,18 @@
 //YOUR GLOBAL DEFINES HERE:
 #include "libraries/API/tinyusbboard.h"
 
-#define DUMMY_PORTONE   B,0
-#define DUMMY_PORTTWO   C,0
-#define DUMMY_PORTTHREE C,0
-#define DUMMY_PORTFOUR  C,0
-
+#ifndef DUMMY_PORTONE
+#   define DUMMY_PORTONE   B,0
+#endif
+#ifndef DUMMY_PORTTWO
+#   define DUMMY_PORTTWO   B,0
+#endif
+#ifndef DUMMY_PORTTHREE
+#   define DUMMY_PORTTHREE B,0
+#endif
+#ifndef DUMMY_PORTFOUR
+#   define DUMMY_PORTFOUR  B,0
+#endif
 
 
 /* extend iocomfort */
